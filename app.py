@@ -5,18 +5,31 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langchain.schema import HumanMessage
 
-# Load API key from file
+# Load API key from environment variable
 def load_api_key():
-    """Load API key from file"""
-    try:
-        with open('/Users/chethan/Documents/era/geminikey.txt', 'r') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        st.error("API key file not found at /Users/chethan/Documents/era/geminikey.txt")
+    """Load API key from environment variable or .env file"""
+    # Try to load from environment variable first
+    api_key = os.getenv('GOOGLE_API_KEY')
+    
+    if not api_key:
+        # Try to load from .env file
+        env_path = '.env'
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, 'r') as f:
+                    for line in f:
+                        if line.strip().startswith('GOOGLE_API_KEY='):
+                            api_key = line.strip().split('=', 1)[1]
+                            break
+            except Exception as e:
+                st.error(f"Error reading .env file: {str(e)}")
+                return None
+    
+    if not api_key:
+        st.error("GOOGLE_API_KEY not found in environment variables or .env file")
         return None
-    except Exception as e:
-        st.error(f"Error reading API key: {str(e)}")
-        return None
+    
+    return api_key
 
 # Initialize session state
 if 'rules_context' not in st.session_state:
