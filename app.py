@@ -101,15 +101,42 @@ def create_workflow():
 
 def parse_result(result: str) -> Dict[str, str]:
     """Parse the LLM result into status and content"""
-    lines = result.strip().split('\n')
+    result = result.strip()
     status = "ERROR"
     content = "Unable to parse result"
     
+    # Try to find status and content with flexible parsing
+    lines = result.split('\n')
+    
     for line in lines:
-        if line.startswith("STATUS:"):
-            status = line.replace("STATUS:", "").strip()
-        elif line.startswith("CONTENT:"):
-            content = line.replace("CONTENT:", "").strip()
+        line = line.strip()
+        # Check for STATUS with various formats
+        if any(line.upper().startswith(prefix) for prefix in ["STATUS:", "STATUS ", "**STATUS"]):
+            # Extract status value
+            line_upper = line.upper()
+            if "NOT_MET" in line_upper:
+                status = "NOT_MET"
+            elif "NOT_FOUND" in line_upper:
+                status = "NOT_FOUND"  
+            elif "MET" in line_upper:
+                status = "MET"
+        # Check for CONTENT with various formats  
+        elif any(line.upper().startswith(prefix) for prefix in ["CONTENT:", "CONTENT ", "**CONTENT"]):
+            content = line.split(":", 1)[-1].strip()
+    
+    # If no explicit format found, try to extract status from anywhere in the text
+    if status == "ERROR":
+        result_upper = result.upper()
+        if "NOT_MET" in result_upper:
+            status = "NOT_MET"
+        elif "NOT_FOUND" in result_upper:
+            status = "NOT_FOUND"
+        elif "MET" in result_upper:
+            status = "MET"
+    
+    # If still no content found, use the whole result
+    if content == "Unable to parse result":
+        content = result
     
     return {"status": status, "content": content}
 
@@ -133,16 +160,6 @@ if st.session_state.rules_context:
 
 new_rules = st.text_area("Enter new rules (one per line):", height=150)
 
-# Combine new rules with context
-all_rules = []
-if st.session_state.rules_context:
-    all_rules.extend(st.session_state.rules_context)
-if new_rules.strip():
-    new_rule_list = [rule.strip() for rule in new_rules.strip().split('\n') if rule.strip()]
-    all_rules.extend(new_rule_list)
-    # Update context with new rules
-    st.session_state.rules_context = list(set(all_rules))  # Remove duplicates
-
 # Text input
 st.subheader("Text to Review")
 text_input = st.text_area("Enter the text you want to check:", height=200)
@@ -154,6 +171,16 @@ if st.button("Clear Rules Context"):
 
 # Review button
 if st.button("Review Text", type="primary"):
+    # Combine new rules with context inside button click
+    all_rules = []
+    if st.session_state.rules_context:
+        all_rules.extend(st.session_state.rules_context)
+    if new_rules.strip():
+        new_rule_list = [rule.strip() for rule in new_rules.strip().split('\n') if rule.strip()]
+        all_rules.extend(new_rule_list)
+        # Update context with new rules
+        st.session_state.rules_context = list(set(all_rules))  # Remove duplicates
+    
     if not all_rules:
         st.error("Please enter at least one rule")
     elif not text_input.strip():
